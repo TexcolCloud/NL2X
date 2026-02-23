@@ -1,0 +1,189 @@
+/* ── Reset & base ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 13px;
+  background: #f3f4f6;
+  color: #1f2937;
+}
+
+/* ── Toolbar ── */
+#toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  height: 42px;
+  background: #1e293b;
+  border-bottom: 1px solid #334155;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.toolbar-group { display: flex; align-items: center; gap: 4px; }
+
+.toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid #475569;
+  border-radius: 4px;
+  background: #334155;
+  color: #e2e8f0;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+}
+.toolbar-btn:hover:not(:disabled) { background: #475569; border-color: #64748b; }
+.toolbar-btn:active:not(:disabled) { background: #1e293b; }
+.toolbar-btn:disabled { opacity: 0.4; cursor: default; }
+
+.style-btn { padding: 4px 8px; min-width: 28px; justify-content: center; }
+
+.toolbar-separator {
+  width: 1px;
+  height: 24px;
+  background: #475569;
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+.toolbar-separator-sm {
+  width: 1px;
+  height: 18px;
+  background: #475569;
+  margin: 0 2px;
+}
+
+/* Color picker labels */
+.color-label {
+  position: relative;
+  gap: 2px;
+}
+.color-label input[type=color] {
+  position: absolute;
+  width: 1px; height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.color-label:focus-within { border-color: #60a5fa; }
+
+/* ── Spreadsheet container ── */
+#spreadsheet-container {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+/* make the x-spreadsheet instance fill the container */
+#spreadsheet-container .x-spreadsheet {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* ── Drop overlay ── */
+#drop-overlay {
+  display: none;
+  position: absolute;
+  inset: 42px 0 0 0;
+  background: rgba(30, 41, 59, 0.88);
+  z-index: 100;
+  align-items: center;
+  justify-content: center;
+}
+#drop-overlay.active { display: flex; }
+.drop-message {
+  color: #e2e8f0;
+  font-size: 22px;
+  border: 3px dashed #60a5fa;
+  border-radius: 16px;
+  padding: 40px 80px;
+}
+
+/* ── Modals ── */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+.modal.hidden { display: none; }
+
+.modal-box {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 28px 32px;
+  min-width: 380px;
+  max-width: 480px;
+  color: #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.modal-box h3 { font-size: 16px; margin-bottom: 4px; color: #f1f5f9; }
+.modal-box label { font-size: 12px; color: #94a3b8; margin-top: 6px; }
+.modal-box input[type=text],
+.modal-box input[type=number] {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #475569;
+  border-radius: 6px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 13px;
+  outline: none;
+}
+.modal-box input:focus { border-color: #60a5fa; }
+
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+
+.btn-primary {
+  padding: 7px 18px;
+  border: none;
+  border-radius: 5px;
+  background: #3b82f6;
+  color: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s;
+}
+.btn-primary:hover { background: #2563eb; }
+
+.btn-secondary {
+  padding: 7px 18px;
+  border: 1px solid #475569;
+  border-radius: 5px;
+  background: transparent;
+  color: #e2e8f0;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s;
+}
+.btn-secondary:hover { background: #334155; }
+
+/* ── Toast ── */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: #065f46;
+  color: #d1fae5;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  z-index: 300;
+  transition: opacity 0.3s;
+}
+.toast.hidden { display: none; }
+.toast.error { background: #7f1d1d; color: #fee2e2; }
