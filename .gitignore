@@ -1,21 +1,32 @@
-# ─── Node.js ──────────────────────────────────────────────────────────────────
+# Node.js
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# ─── Electron 构建产物 ────────────────────────────────────────────────────────
+# Build artifacts
 dist/
 out/
 release/
 build/
+app-builder-binaries/
 
-# ─── electron-store 持久化数据（用户本地配置，不入库）─────────────────────────
-# Windows: %APPDATA%\electron-xlsx-editor\
-# 已在 node_modules 外，但若本地有测试用的 config.json 也排除
+# Runtime/cache/temp
+*.log
+logs/
+*.tmp
+*.temp
+.cache/
+
+# Environment/secrets
+.env
+.env.local
+.env.*.local
+secrets.json
+agent-config.json
 *.store.json
 
-# ─── 系统 / IDE ───────────────────────────────────────────────────────────────
+# OS/IDE
 .DS_Store
 Thumbs.db
 desktop.ini
@@ -23,12 +34,11 @@ desktop.ini
 *.user
 .vscode/
 .idea/
+__pycache__/
 
-# ─── 日志 ─────────────────────────────────────────────────────────────────────
-*.log
-logs/
+# Local agent state
+.agent/
 
-# ─── 临时文件 ─────────────────────────────────────────────────────────────────
-*.tmp
-*.temp
-.cache/
+# OpenSpec generated helper files
+openspec/changes/**/_instr_*.txt
+openspec/changes/**/_instructions_*.txt

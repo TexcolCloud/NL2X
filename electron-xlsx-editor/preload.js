@@ -11,6 +11,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getConfig: (key, defaultValue) => ipcRenderer.invoke('config:get', key, defaultValue),
     setConfig: (key, value) => ipcRenderer.invoke('config:set', key, value),
 
+    // Agent
+    callAgent: (payload) => ipcRenderer.invoke('agent:call', payload),
+    testAgent: (payload) => ipcRenderer.invoke('agent:test', payload),
+
     // Window state
     setDirty: (value) => ipcRenderer.send('set-dirty', value),
     setTitle: (fileName) => ipcRenderer.send('set-title', fileName),

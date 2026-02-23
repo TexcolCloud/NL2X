@@ -159,6 +159,96 @@ function updateSyncButtons(hasEndpoint) {
     });
 }
 
+// ─── Agent integration ───────────────────────────────────────────────────────
+/**
+ * Returns the header row (row 0) of the first (active) sheet as a string array.
+ * x-data-spreadsheet stores data as { name, rows: { 0: { cells: { 0: {text}, 1: {text}, ... } } } }
+ */
+function getSheetHeaders() {
+    if (!spreadsheet) return [];
+    const data = spreadsheet.getData();
+    if (!data || data.length === 0) return [];
+
+    const sheetData = data[0];
+    const rows = sheetData.rows || {};
+    const headerRow = rows[2];
+    if (!headerRow || !headerRow.cells) return [];
+
+    const cells = headerRow.cells;
+    const colIndices = Object.keys(cells).map(Number).filter(n => !isNaN(n));
+    if (colIndices.length === 0) return [];
+
+    const maxCol = Math.max(...colIndices) + 1;
+    const headers = [];
+    for (let i = 0; i < maxCol; i++) {
+        const cell = cells[i];
+        const text = cell && cell.text != null ? String(cell.text).trim() : '';
+        if (text) headers.push(text);
+    }
+    return headers;
+}
+
+/**
+ * Writes a parsed row object (from LLM) into the next empty row of the first sheet.
+ * @param {object} rowData — keys matching header names, values as cell content
+ */
+function writeAgentRow(rowData) {
+    if (!spreadsheet) return false;
+    const data = spreadsheet.getData();
+    if (!data || data.length === 0) return false;
+
+    const sheetData = data[0];
+    const rows = sheetData.rows || {};
+
+    const headerRow = rows[2];
+    if (!headerRow || !headerRow.cells) return false;
+    const headerCells = headerRow.cells;
+
+    const colIndexMap = {};
+    Object.entries(headerCells).forEach(([colIdx, cell]) => {
+        const text = cell && cell.text != null ? String(cell.text).trim() : '';
+        if (text) colIndexMap[text] = parseInt(colIdx, 10);
+    });
+
+    const normalizeKey = (s) => String(s == null ? '' : s).trim().replace(/\s+/g, ' ').toLowerCase();
+    const normalizedRowData = {};
+    Object.entries(rowData || {}).forEach(([k, v]) => {
+        normalizedRowData[normalizeKey(k)] = v;
+    });
+
+    const newCells = {};
+    Object.entries(colIndexMap).forEach(([headerName, colIdx]) => {
+        let val = rowData ? rowData[headerName] : undefined;
+        if (val == null) val = normalizedRowData[normalizeKey(headerName)];
+        if (val != null && String(val).trim() !== '') {
+            newCells[colIdx] = { text: String(val) };
+        }
+    });
+
+    if (Object.keys(newCells).length === 0) {
+        showToast('No writable fields matched row-3 headers', true);
+        return false;
+    }
+
+    const thirdColIdx = 2;
+    let thirdColCount = 0;
+    Object.keys(rows).map(Number).filter(i => i > 2).forEach((rowIdx) => {
+        const cell = rows[rowIdx] && rows[rowIdx].cells ? rows[rowIdx].cells[thirdColIdx] : null;
+        const text = cell && cell.text != null ? String(cell.text).trim() : '';
+        if (text) thirdColCount++;
+    });
+
+    const targetRowIdx = 2 + thirdColCount + 1;
+    const existingCells = rows[targetRowIdx] && rows[targetRowIdx].cells ? rows[targetRowIdx].cells : {};
+    rows[targetRowIdx] = { cells: { ...existingCells, ...newCells } };
+
+    sheetData.rows = rows;
+    spreadsheet.loadData(data);
+    window.electronAPI.setDirty(true);
+    showToast(`AI row written: #${targetRowIdx + 1}`);
+    return true;
+}
+
 // ─── Drag & drop ──────────────────────────────────────────────────────────────
 function initDragDrop() {
     const overlay = document.getElementById('drop-overlay');
@@ -233,4 +323,7 @@ function bindEvents() {
     // Init axios and sync button state
     const hasEndpoint = await Syncer.buildAxiosInstance();
     updateSyncButtons(hasEndpoint);
+
+    // Init AI agent panel
+    AgentPanel.init(getSheetHeaders, writeAgentRow);
 })();

@@ -5,7 +5,8 @@
     "main": "main.js",
     "scripts": {
         "start": "electron .",
-        "build": "electron-builder"
+        "build": "electron-builder",
+        "verify:agent": "node scripts/verify-agent-change.mjs"
     },
     "build": {
         "appId": "com.example.electron-xlsx-editor",
@@ -38,7 +39,8 @@
         "axios": "^1.6.0",
         "electron-store": "^8.1.0",
         "exceljs": "^4.4.0",
-        "x-data-spreadsheet": "^1.1.9"
+        "x-data-spreadsheet": "^1.1.9",
+        "xlsx": "^0.18.5"
     },
     "devDependencies": {
         "electron": "^22.3.27",

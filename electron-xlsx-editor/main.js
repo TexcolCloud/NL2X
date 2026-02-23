@@ -3,6 +3,8 @@
 const { app, BrowserWindow, ipcMain, Menu, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const https = require('https');
+const http = require('http');
 const Store = require('electron-store');
 
 const store = new Store();
@@ -136,6 +138,157 @@ ipcMain.handle('file:save', async (_, { base64, defaultName }) => {
 // config:get / config:set — backed by electron-store
 ipcMain.handle('config:get', (_, key, defaultValue) => store.get(key, defaultValue));
 ipcMain.handle('config:set', (_, key, value) => { store.set(key, value); });
+
+// agent:call — send LLM API request from main process (avoids renderer CORS)
+ipcMain.handle('agent:call', async (_, { baseUrl, apiKey, systemPrompt, userInput, headers, model }) => {
+    // Build full system message: fixed prefix + column names + user custom prompt
+    const colNames = Array.isArray(headers) && headers.length > 0 ? headers.join('、') : '（无列名）';
+    const fullSystemPrompt =
+        `你是一个结构化数据解析助手。当前表格列名为：[${colNames}]。\n` +
+        `请将用户输入解析为 JSON 对象，key 必须严格对应列名，缺失的字段留 null。\n` +
+        `只输出 JSON，不要其他内容。` +
+        (systemPrompt ? `\n\n${systemPrompt}` : '');
+
+    const requestBody = JSON.stringify({
+        model: model || 'gpt-3.5-turbo',
+        messages: [
+            { role: 'system', content: fullSystemPrompt },
+            { role: 'user', content: userInput },
+        ],
+    });
+
+    // Parse baseUrl to get host, port, path
+    let parsedUrl;
+    try {
+        parsedUrl = new URL(baseUrl);
+    } catch {
+        return { error: '无效的 Base URL 格式' };
+    }
+
+    const isHttps = parsedUrl.protocol === 'https:';
+    const lib = isHttps ? https : http;
+    const port = parsedUrl.port ? parseInt(parsedUrl.port) : (isHttps ? 443 : 80);
+    const basePath = parsedUrl.pathname.replace(/\/v1\/?$/, '').replace(/\/$/, '');
+    const apiPath = basePath + '/v1/chat/completions';
+
+    // 读取用户配置的超时时间，默认 120s（国内模型推理时间较长）
+    const timeoutMs = store.get('requestTimeout', 120000);
+
+    return new Promise((resolve) => {
+        const options = {
+            hostname: parsedUrl.hostname,
+            port,
+            path: apiPath,
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Length': Buffer.byteLength(requestBody),
+            },
+        };
+
+        let settled = false;
+        const done = (val) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(val);
+        };
+
+        // 用普通 setTimeout 做绝对超时（而非 req.setTimeout 的 idle 超时）
+        // 避免 LLM 推理期间服务器没有返回任何数据时被误判
+        const timer = setTimeout(() => {
+            req.destroy();
+            done({ error: `请求超时（${Math.round(timeoutMs / 1000)}s）` });
+        }, timeoutMs);
+
+        const req = lib.request(options, (res) => {
+            let data = '';
+            res.on('data', (chunk) => { data += chunk; });
+            res.on('end', () => {
+                if (res.statusCode < 200 || res.statusCode >= 300) {
+                    done({ error: `HTTP ${res.statusCode}: ${data.slice(0, 200)}` });
+                    return;
+                }
+                try {
+                    const json = JSON.parse(data);
+                    const content = json.choices?.[0]?.message?.content?.trim() ?? '';
+                    // Strip markdown code fences if present
+                    const cleaned = content.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+                    const parsed = JSON.parse(cleaned);
+                    done(parsed);
+                } catch (e) {
+                    done({ error: `LLM 返回内容无法解析为 JSON：${data.slice(0, 200)}` });
+                }
+            });
+        });
+
+        req.on('error', (e) => {
+            done({ error: `网络请求失败：${e.message}` });
+        });
+
+        req.write(requestBody);
+        req.end();
+    });
+});
+
+
+// agent:test — minimal connectivity/auth check (does NOT parse row data)
+ipcMain.handle('agent:test', async (_, { baseUrl, apiKey, model }) => {
+    let parsedUrl;
+    try { parsedUrl = new URL(baseUrl); } catch {
+        return { error: '无效的 Base URL 格式' };
+    }
+
+    const isHttps = parsedUrl.protocol === 'https:';
+    const lib = isHttps ? https : http;
+    const port = parsedUrl.port ? parseInt(parsedUrl.port) : (isHttps ? 443 : 80);
+    const basePath = parsedUrl.pathname.replace(/\/v1\/?$/, '').replace(/\/$/, '');
+    const apiPath = basePath + '/v1/chat/completions';
+
+    const body = JSON.stringify({
+        model: model || 'gpt-3.5-turbo',
+        messages: [{ role: 'user', content: 'hi' }],
+        max_tokens: 1,
+    });
+
+    return new Promise((resolve) => {
+        const req = lib.request({
+            hostname: parsedUrl.hostname,
+            port,
+            path: apiPath,
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Length': Buffer.byteLength(body),
+            },
+        }, (res) => {
+            let data = '';
+            res.on('data', (c) => { data += c; });
+            res.on('end', () => {
+                if (res.statusCode === 401) {
+                    resolve({ error: `鉴权失败（401）：API Key 不正确` });
+                } else if (res.statusCode === 404) {
+                    resolve({ error: `地址不存在（404）：请检查 Base URL` });
+                } else if (res.statusCode >= 200 && res.statusCode < 300) {
+                    try {
+                        const j = JSON.parse(data);
+                        resolve({ success: true, model: j.model || '未知' });
+                    } catch {
+                        resolve({ success: true, model: '未知' });
+                    }
+                } else {
+                    resolve({ error: `HTTP ${res.statusCode}: ${data.slice(0, 120)}` });
+                }
+            });
+        });
+        req.on('error', (e) => resolve({ error: `网络错误：${e.message}` }));
+        req.setTimeout(15000, () => { req.destroy(); resolve({ error: '连接超时（15s）' }); });
+        req.write(body);
+        req.end();
+    });
+});
 
 // dirty-state tracking from renderer
 ipcMain.on('set-dirty', (_, value) => {
